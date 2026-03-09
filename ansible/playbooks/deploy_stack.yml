@@ -1,0 +1,39 @@
+---
+- name: Zero-Trust Ecosystem Deployment
+  hosts: stack_nodes
+  become: yes
+  vars:
+    ecosystem_network: "sovern_internal_bridge"
+
+  tasks:
+    - name: Hardening - Install UFW (Uncomplicated Firewall)
+      apt:
+        name: ufw
+        state: present
+        update_cache: yes
+
+    - name: Hardening - Set UFW Default Deny
+      ufw:
+        direction: incoming
+        policy: deny
+
+    - name: Base Installation - Setup Docker Requirements
+      apt:
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+
+    - name: Base Installation - Ensure Docker daemon is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Network Segregation - Create isolated internal Docker bridge
+      docker_network:
+        name: "{{ ecosystem_network }}"
+        driver: bridge
+        internal: yes # Zero-trust constraint: containers cannot reach the public internet unless reversed routed
