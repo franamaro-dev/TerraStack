@@ -1,37 +1,125 @@
+<div align="center">
+
 # TerraStack
 
-> **Infrastructure-as-Code (Terraform/Ansible) templates for zero-trust FinTech deployments.**
+**Infrastructure-as-Code templates for Zero-Trust deployments on AWS / GCP / on-prem.**
 
-<div align="center">
-  <img src="https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white" />
-  <img src="https://img.shields.io/badge/Ansible-EE0000?style=for-the-badge&logo=ansible&logoColor=white" />
-  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
-  <img src="https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white" />
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Terraform](https://img.shields.io/badge/Terraform-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
+[![Ansible](https://img.shields.io/badge/Ansible-EE0000?logo=ansible&logoColor=white)](https://www.ansible.com/)
+[![Zero Trust](https://img.shields.io/badge/Model-Zero%20Trust-red?logo=cloudflare&logoColor=white)]()
+[![Validate IaC](https://github.com/franamaro-dev/TerraStack/actions/workflows/validate_iac.yml/badge.svg)](https://github.com/franamaro-dev/TerraStack/actions)
+
 </div>
 
-## ⚠️ El Problema
-Los despliegues manuales mediante SSH rompen las cadenas de custodia, fallan en las auditorías técnicas (ISO 27001), y dificultan enormemente la escalabilidad horizontal en entornos transaccionales como VeriFactu o TicketBAI.
+---
 
-## ⚡ La Solución (Infraestructura como Código)
-**TerraStack** es la receta oficial para poner en producción de forma orquestada la suite `VeriStack` y `FlowNode`.
-Divide la topología en dos fases deterministas:
-1. **Provisioning (Terraform):** Genera redes privadas virtuales (VPC), instancias seguras (Linux Hardened) y aplica *Security Groups* bajo la premisa de *Default Deny* (Zero-Trust).
-2. **Configuration Management (Ansible):** Orquesta los contenedores Docker dentro de la VLAN generada, enlazando APIs con Brokers (Redis) de forma ciega y segura al exterior.
+## What it solves
 
-## 🚀 Uso Rápido (Dry Run)
+Most starter Terraform repos hand you a VPC and a public EC2. TerraStack starts from the **opposite assumption**: nothing is trusted by default.
 
-```bash
-# 1. Validar plan de infraestructura
-cd terraform
-terraform init
-terraform plan -out=fintech_prod.tfplan
+It bundles a set of opinionated modules to bootstrap an environment that is **private-by-default, audit-first, and reproducible** — with Ansible doing the post-provision hardening that Terraform doesn't cover.
 
-# 2. Configurar servidores e inyectar Docker Compose Stack
-cd ../ansible
-ansible-playbook -i inventory/production.ini playbooks/deploy_stack.yml --check
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph IaC["IaC Pipeline"]
+        TF[Terraform] -->|provision| Cloud[Cloud Resources]
+        TF -->|outputs| Inv[Ansible Inventory]
+        Inv --> Ans[Ansible Playbooks]
+        Ans -->|harden| Cloud
+    end
+    Cloud --> ZT[Zero-Trust Posture]
+    ZT --> Audit[Audit Logs / SIEM]
+
+    style TF fill:#7B42BC,color:#fff
+    style Ans fill:#EE0000,color:#fff
+    style ZT fill:#red,color:#fff
 ```
 
-## 🔒 Postura de Seguridad (Zero-Trust)
-* Los puertos de bases de datos de vectores (Qdrant) y colas (Redis) **nunca** están expuestos a redes públicas.
-* SSH reforzado y restingido solo para IPs de control.
-* Despliegue garantizado mediante *Immutable Infrastructure*.
+---
+
+## Principles
+
+- **Deny by default**: every security group, firewall rule and IAM policy starts at `deny *`.
+- **Least privilege**: roles scoped per-service, no wildcard `*` actions.
+- **No public ingress** without an explicit, justified module flag.
+- **State remote, encrypted, locked**: S3 + DynamoDB / GCS + locks.
+- **Immutable infrastructure**: redeploy, don't `ssh + patch`.
+- **CI validation**: `terraform fmt` + `terraform validate` + `tflint` + `tfsec` on every PR.
+
+---
+
+## Repository layout
+
+```
+.
+├── terraform/
+│   ├── modules/        # reusable, versioned modules
+│   ├── envs/           # per-environment composition (dev / staging / prod)
+│   └── backend.tf      # remote state config
+├── ansible/
+│   ├── playbooks/      # hardening, post-provision config
+│   ├── roles/          # CIS-aligned roles
+│   └── inventory/      # dynamic inventory (terraform output → ansible)
+└── .github/workflows/  # validate_iac.yml
+```
+
+---
+
+## Quickstart
+
+```bash
+git clone https://github.com/franamaro-dev/TerraStack.git
+cd TerraStack/terraform/envs/dev
+terraform init
+terraform plan -out tfplan
+terraform apply tfplan
+```
+
+Then run hardening:
+
+```bash
+cd ../../../ansible
+ansible-playbook -i inventory/dev playbooks/harden.yml
+```
+
+---
+
+## Tech stack
+
+| Layer | Tool |
+|-------|------|
+| Provisioning | Terraform (HCL) |
+| Configuration | Ansible (YAML) |
+| State | S3 / GCS + lock table |
+| Validation | `tflint`, `tfsec`, `ansible-lint` |
+| CI | GitHub Actions |
+
+---
+
+## Roadmap
+
+- [ ] OpenTofu compatibility check
+- [ ] Module: zero-trust VPC peering
+- [ ] Module: SSO + SCIM for cloud accounts
+- [ ] OPA / Conftest policies for compliance gates
+- [ ] Cost guardrails (Infracost)
+
+---
+
+## License
+
+[MIT](LICENSE) © Francisco Amaro Prieto
+
+---
+
+<div align="center">
+
+Built by [Francisco Amaro](https://github.com/franamaro-dev) — Backend Engineer & SOC L1 Analyst
+[LinkedIn](https://linkedin.com/in/franamaro) · [Email](mailto:franamaroprieto@gmail.com)
+
+</div>
